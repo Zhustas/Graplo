@@ -1,0 +1,1101 @@
+﻿@inject IJSRuntime JS
+
+<div class="flex">
+	<svg viewBox=@svgViewBox transform=@svgTransform @ref=svgRef @onclick=HandleSVGClick @onmousedown=OnMouseDown @onmouseup=OnMouseUp 
+		@onmousemove=OnMouseMove @onmouseleave=OnMouseLeave @onmousewheel=OnMouseWheel @onmousewheel:preventDefault="true"
+		 class="w-[1500px] h-[900px] bg-white" style="cursor: @svgCursor; height: 100vh;">
+		@{ // X ir Y ašis
+			string[] currentViewBox = svgViewBox.Split(" ");
+
+			int currentVBX = (int)Convert.ToDouble(currentViewBox[0]);
+
+			int currentVBWidth = (int)Convert.ToDouble(currentViewBox[2]);
+
+			int difVBX = Math.Abs(currentVBX + currentVBWidth);
+			if (currentVBX < -1 * currentVBWidth) // Slenka į kairę
+			{
+				difVBX *= -1;
+			}
+
+			leftX = -2 * currentVBWidth + difVBX; rightX = 2 * currentVBWidth + difVBX;
+			int startY = 0, endY = 0;
+
+			// *****************************
+
+			<line x1=@leftX y1=@startY x2=@rightX y2=@endY stroke=@plotterColor stroke-width="0.1" />
+
+			int currentVBY = (int)Convert.ToDouble(currentViewBox[1]);
+
+			int currentVBHeight = (int)Convert.ToDouble(currentViewBox[3]);
+
+			int difVBY = Math.Abs(currentVBY + currentVBHeight);
+			if (currentVBY < -1 * currentVBHeight) // Slenka į apačią
+			{
+				difVBY *= -1;
+			}
+
+			int startX = 0;
+			int endX = 0;
+			topY = 2 * currentVBHeight + difVBY; bottomY = -2 * currentVBHeight + difVBY;
+
+			<line x1=@startX y1=@topY x2=@endX y2=@bottomY stroke=@plotterColor stroke-width="0.1" />
+		}
+
+		@{ // Ašių skaičiai
+			<text><text x="-0.5" y="0.5" font-size="0.5" transform="scale(1, -1)" class="select-none">0</text></text>
+
+			int tempLeftX = leftX;
+			while (tempLeftX <= rightX)
+			{
+				if (tempLeftX % 5 == 0 && tempLeftX != 0)
+				{
+					string s = tempLeftX.ToString();
+					double padding = (0.1) * s.Length;
+					if (s[0] == '-')
+					{
+						padding -= 0.1;
+					}
+
+					<text><text x=@(tempLeftX + padding) y="0.5" font-size="0.5" transform="scale(1, -1)" class="select-none">@tempLeftX</text></text>
+					<line x1=@tempLeftX y1="-0.3" x2=@tempLeftX y2="0.3" stroke=@plotterColor stroke-width="0.1" />
+				}
+
+				tempLeftX++;
+			}
+
+			int tempTopY = topY;
+			while (tempTopY >= bottomY)
+			{
+				if (tempTopY % 5 == 0 && tempTopY != 0)
+				{
+					string s = tempTopY.ToString();
+					double padding = -0.5 + (-0.3) * s.Length;
+					if (s[0] == '-')
+					{
+						padding += 0.3;
+					}
+
+					<text><text x=@padding y=@(-1 * tempTopY - 0.2) font-size="0.5" transform="scale(1, -1)" class="select-none">@tempTopY</text></text>
+					<line x1="-0.3" y1=@(-1 * tempTopY) x2="0.3" y2=@(-1 * tempTopY) stroke=@plotterColor stroke-width="0.1" />
+				}
+
+				tempTopY--;
+			}
+		}
+		
+		@{
+			// Lygtys
+			double difference = (Math.Abs(leftX) + Math.Abs(rightX)) / (POINTS_TO_CALCULATE * 1.0);
+
+			for (int i = 0; i < maximumOfEquation; i++)
+			{
+				int index = i;
+
+				if (!isGraphColorHidden[index])
+				{
+					double x = leftX;
+
+					bool previousPointExists = false;
+					V2 previousPoint = new V2();
+
+					while (x <= rightX)
+					{
+						if (ContainsUnnecessaryTypes(index) || equations![index] == "")
+						{
+							break;
+						}
+
+						double y = CalculateEquation(x, index);
+
+						if (previousPointExists)
+						{
+							<line x1=@previousPoint.X y1=@previousPoint.Y x2=@x y2=@y class="@(graphColors[index])" stroke-width="0.1" />
+						}
+						else
+						{
+							previousPointExists = true;
+						}
+
+						previousPoint.X = x;
+						previousPoint.Y = y;
+
+						x += difference;
+					}
+				}
+			}
+		}
+
+		@foreach (EnteredText eText in enteredTexts)
+		{
+			<text><text @onclick=@(() => HandleTextOnClick(eText)) x=@eText.Position.X y=@(-eText.Position.Y) font-size="0.5" transform="scale(1, -1)" 
+				class="select-none">@eText.Text</text></text>
+		}
+
+		@if (eTextToDelete != null)
+		{
+			enteredTexts.Remove(eTextToDelete);
+			eTextToDelete = null;
+		}
+
+		@if (showEnterTextInput)
+		{
+			if (enteredText != "")
+			{
+				<text><text x=@enteredTextPosition.X y=@(-enteredTextPosition.Y) font-size="0.5" transform="scale(1, -1)" class="select-none">@enteredText</text></text>
+			} else
+			{
+				<text><text x=@enteredTextPosition.X y=@(-enteredTextPosition.Y) font-size="0.5" transform="scale(1, -1)" class="select-none">|</text></text>
+			}
+		}
+	</svg>
+
+	<div class="grow bg-red-300 pt-3 px-4" style="height: 100vh;">
+		<div class="mb-2">
+			@for (int i = 0; i < maximumOfEquation; i++)
+			{
+				int iTemp = i;
+				string graphColor = isGraphColorHidden[iTemp] ? graphColorHidden : graphColorsBG[iTemp];
+				<div class="py-2">
+					<div class="flex justify-center items-center gap-2">
+						<input @bind-value=@equations![iTemp] @oninput=@((e) => ParseEquation(e, iTemp)) class="w-56 outline-none p-1 text-center rounded-md font-medium" />
+						<div @onclick=@(() => HandleGraphColorClick(iTemp)) style="cursor: pointer;" 
+							class="w-6 h-6 border-2 rounded-full border-black @graphColor">
+						</div>
+					</div>
+					@if (equations[iTemp] != "" && !ContainsUnnecessaryTypes(iTemp) && !isGraphColorHidden[iTemp])
+					{
+						if (GetEquationType(iTemp) == EquationType.Linear)
+						{
+							double ox = Math.Round(GetLinearOX(iTemp), 4);
+							double oy = Math.Round(GetOY(iTemp), 4);
+							<div class="mt-1 font-semibold text-white">
+								<p class="">Crosses y-axis, when y = @oy</p>
+								@if (haxOX[iTemp])
+								{
+									<p>Crosses x-axis, when x = @ox</p>
+								}
+								else
+								{
+									<p>Doesn't cross x-axis</p>
+								}
+							</div>
+						} else if (GetEquationType(iTemp) == EquationType.Quadratic)
+						{
+							double[] coeffs = GetQuadraticEquationCoefficients(iTemp);
+							double xVertex = Math.Round(GetXVertexQuadraticEq(coeffs), 4);
+							double yVertex = Math.Round(CalculateEquation(xVertex, iTemp), 4);
+							double oy = Math.Round(GetOY(iTemp), 4);
+							double[] solutions = GetOXQuadraticEq(coeffs, iTemp);
+							<div class="mt-1 font-semibold text-white">
+								<p>Crosses y-axis, when y = @oy</p>
+								@if (quadSolutions[iTemp] == QuadraticSolutionType.Two)
+								{
+									if (solutions[0] < solutions[1])
+									{
+										<p>Crosses x-axis, when x1 = @Math.Round(solutions[0], 4) and x2 = @Math.Round(solutions[1], 4)</p>
+									} else
+									{
+										<p>Crosses x-axis, when x1 = @Math.Round(solutions[1], 4) and x2 = @Math.Round(solutions[0], 4)</p>
+									}
+								} else if (quadSolutions[iTemp] == QuadraticSolutionType.One)
+								{
+									<p>Crosses x-axis, when x = @solutions[0]</p>
+								} else
+								{
+									<p>Doesn't cross x-axis</p>
+								}
+								<p>Vertex position: x = @xVertex, y = @yVertex</p>
+							</div>
+						}
+					}
+				</div>
+			}
+		</div>
+		<div class="flex gap-2">
+			<button @onclick=TeleportToOrigin class="shadow-md rounded-md font-medium p-2 text-white bg-red-600">Back to origin</button>
+			<button @onclick=HandleEnterTextBtnClick class="shadow-md rounded-md font-medium p-2 text-white bg-red-600">@enterTextPrompt</button>
+		</div>
+		@if (showEnterTextInput)
+		{
+			<p class="font-semibold text-white ml-1 mt-2">Enter text</p>
+			<div class="mt-0.5 mb-3">
+				<input @oninput=@UpdateEnteredTextOnSVG class="w-full outline-none p-1 text-center rounded-md font-medium" />
+			</div>
+		}
+		<div class="mt-2">
+			<button @onclick=HandleDeleteBtnText class="shadow-md rounded-md font-medium p-2 text-white bg-red-600">@deleteTextPrompt</button>
+		</div>
+		<div class="flex gap-2 justify-end mt-5 mb-2">
+			<InputFile OnChange=LoadGraph class="shadow-md rounded-md font-medium p-2 text-white bg-red-600" />
+		</div>
+		<div class="flex justify-end">
+			<button @onclick=SaveGraph class="shadow-md rounded-md font-medium p-2 text-white bg-red-600">Save graph</button>
+		</div>
+	</div>
+</div>
+
+@code {
+	public string plotterColor = "black";
+
+	private const int SIDE_LENGTH = 10;
+	private const int POINTS_TO_CALCULATE = 400;
+	private const int TEXT_NUMS_LEN = 4;
+
+	private int leftX = -2 * SIDE_LENGTH, rightX = 2 * SIDE_LENGTH;
+	private int topY = 2 * SIDE_LENGTH, bottomY = -2 * SIDE_LENGTH;
+
+	private string svgViewBox = $"{-1 * SIDE_LENGTH} {-1 * SIDE_LENGTH} {SIDE_LENGTH * 2} {SIDE_LENGTH * 2}";
+	private string originalViewBox = $"{-1 * SIDE_LENGTH} {-1 * SIDE_LENGTH} {SIDE_LENGTH * 2} {SIDE_LENGTH * 2}";
+	private string svgTransform = "scale(1, -1)";
+
+	// ************************************************
+	// ********************************* Panning effect
+	// ************************************************
+
+	private struct ViewBox
+	{
+		public V2 position = new V2(-1 * SIDE_LENGTH, -1 * SIDE_LENGTH);
+		public double width = SIDE_LENGTH * 2;
+		public double height = SIDE_LENGTH * 2;
+
+		public ViewBox() { }
+	}
+
+	private bool isMouseDown = false;
+	V2 mouseOrigin = new V2(-260, -260);
+
+	ViewBox viewBox = new ViewBox();
+	V2 newViewBox = new V2();
+
+	private V2 GetPointFromEvent(MouseEventArgs eventArgs)
+	{
+		return new V2(eventArgs.ClientX, eventArgs.ClientY);
+	}
+
+	private void OnMouseDown(MouseEventArgs eventArgs)
+	{
+		isMouseDown = true;
+
+		V2 mousePosition = GetPointFromEvent(eventArgs);
+		mouseOrigin.X = mousePosition.X;
+		mouseOrigin.Y = mousePosition.Y;
+	}
+
+	private void OnMouseUp(MouseEventArgs eventArgs)
+	{
+		if (readyToPlaceTextPoint)
+		{
+			svgCursor = "text";
+		}
+		else
+		{
+			svgCursor = "grab";
+		}
+		isMouseDown = false;
+
+		viewBox.position.X = newViewBox.X;
+		viewBox.position.Y = newViewBox.Y;
+	}
+
+	private void OnMouseMove(MouseEventArgs eventArgs)
+	{
+		if (!isMouseDown || readyToPlaceTextPoint)
+		{
+			return;
+		}
+
+		svgCursor = "grabbing";
+
+		V2 mousePosition = GetPointFromEvent(eventArgs);
+
+		newViewBox.X = viewBox.position.X - (mousePosition.X - mouseOrigin.X) * 0.05;
+		newViewBox.Y = viewBox.position.Y + (mousePosition.Y - mouseOrigin.Y) * 0.05;
+
+		svgViewBox = $"{newViewBox.X} {newViewBox.Y} {viewBox.width} {viewBox.height}";
+	}
+
+	private void OnMouseLeave(MouseEventArgs eventArgs)
+	{
+		if (readyToPlaceTextPoint)
+		{
+			svgCursor = "text";
+		} else
+		{
+			svgCursor = "grab";
+		}
+		isMouseDown = false;
+
+		viewBox.position.X = newViewBox.X;
+		viewBox.position.Y = newViewBox.Y;
+	}
+
+	private void OnMouseWheel(WheelEventArgs eventArgs)
+	{
+		if (readyToPlaceTextPoint)
+		{
+			return;
+		}
+
+		double w = viewBox.width;
+		double h = viewBox.height;
+
+		double mx = eventArgs.OffsetX;
+		double my = eventArgs.OffsetY;
+
+		double dw = w * Math.Sign(eventArgs.DeltaY) * 0.05;
+		double dh = h * Math.Sign(eventArgs.DeltaY) * 0.05;
+		double dx = dw * mx / 800.0;
+		double dy = dh * my / 800.0;
+
+		viewBox.position.X += dx;
+		viewBox.position.Y += dy;
+		viewBox.width -= dw;
+		viewBox.height -= dh;
+
+		svgViewBox = $"{viewBox.position.X} {viewBox.position.Y} {viewBox.width} {viewBox.height}";
+	}
+
+	private string[] graphColorsBG = new string[] { "bg-red-400", "bg-orange-400", "bg-green-400", "bg-cyan-400", "bg-blue-400" };
+	private bool[] isGraphColorHidden = new bool[] { false, false, false, false, false };
+	private string graphColorHidden = "bg-slate-300";
+	private void HandleGraphColorClick(int index)
+	{
+		isGraphColorHidden[index] = !isGraphColorHidden[index];
+		StateHasChanged();
+	}
+
+	private void TeleportToOrigin()
+	{
+		svgViewBox = originalViewBox;
+
+		viewBox = new ViewBox();
+		newViewBox = new V2();
+	}
+
+	// ************************************************
+	// ************************************** Equations
+	// ************************************************
+
+	private int numberOfEquations = 0;
+	private const int maximumOfEquation = 5;
+
+	private string[]? equations = null;
+	private List<TreeNode>[]? treeNodes = null;
+
+	private string[] graphColors = new string[] { "stroke-red-400", "stroke-orange-400", "stroke-green-400", "stroke-cyan-400", "stroke-blue-400" };
+
+	protected override void OnInitialized()
+	{
+		equations = new string[maximumOfEquation];
+		treeNodes = new List<TreeNode>[maximumOfEquation];
+
+		for (int i = 0; i < equations.Length; i++)
+		{
+			equations[i] = "";
+			treeNodes[i] = new List<TreeNode>();
+		}
+	}
+
+	private enum TreeNodeType
+	{
+		Number,
+		Sign,
+		X,
+		Unknown,
+		None
+	}
+
+	private class TreeNode
+	{
+		public string Value;
+		public TreeNodeType Type;
+
+		public TreeNode(string value, TreeNodeType type)
+		{
+			Value = value;
+			Type = type;
+		}
+
+		public override string ToString()
+		{
+			return $"(Value: {Value}, type: {Type})";
+		}
+	}
+
+	private bool IsSign(char s)
+	{
+		char[] signs = new char[] { '+', '-', '*', '/' };
+
+		return signs.Contains(s);
+	}
+
+	private bool IsDigit(char s)
+	{
+		char[] numbers = new char[] { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
+
+		return numbers.Contains(s);
+	}
+
+	private string GetNumber(int startPosition, out int endPosition, int index)
+	{
+		const char DOT = '.';
+
+		bool previousWasNumber = true;
+
+		int position = startPosition;
+		int length = 0;
+		while (position != equations![index].Length)
+		{
+			if (IsDigit(equations[index][position]))
+			{
+				previousWasNumber = true;
+			}
+			else
+			{
+				if (equations[index][position] != DOT)
+				{
+					position--;
+					break;
+				}
+
+				if (!previousWasNumber)
+				{
+					position -= 2;
+					length--;
+					break;
+				}
+
+				previousWasNumber = false;
+			}
+
+			position++;
+			length++;
+		}
+
+		endPosition = position;
+
+		return equations[index].Substring(startPosition, length);
+	}
+
+	private void ParseEquation(ChangeEventArgs? eventArgs, int index)
+	{
+		const char X = 'x';
+
+		if (eventArgs != null)
+		{
+			equations![index] = (eventArgs?.Value == null) ? "" : (string)eventArgs.Value;
+			equations[index] = equations[index].ToLower();
+		}
+
+		treeNodes![index].Clear();
+		for (int i = 0; i < equations![index].Length; i++)
+		{
+			TreeNode treeNode;
+			if (equations[index][i] == X)
+			{
+				treeNode = new TreeNode(Convert.ToString(X), TreeNodeType.X);
+			}
+			else if (equations[index][i] == '-')
+			{
+				if (i != 0)
+				{
+					treeNode = new TreeNode("+", TreeNodeType.Sign);
+					treeNodes[index].Add(treeNode);
+				}
+
+				treeNode = new TreeNode(Convert.ToString(-1), TreeNodeType.Number);
+			}
+			else if (IsSign(equations[index][i]) && i != equations[index].Length - 1)
+			{
+				treeNode = new TreeNode(Convert.ToString(equations[index][i]), TreeNodeType.Sign);
+			}
+			else if (IsDigit(equations[index][i]))
+			{
+				int endPosition;
+				string number = GetNumber(i, out endPosition, index);
+
+				treeNode = new TreeNode(number, TreeNodeType.Number);
+				i = endPosition;
+			}
+			else
+			{
+				treeNode = new TreeNode(Convert.ToString(equations[index][i]), TreeNodeType.Unknown);
+			}
+
+			treeNodes[index].Add(treeNode);
+		}
+
+		AddNecessaryTypes(index);
+	}
+
+	private void AddNecessaryTypes(int index)
+	{
+		for (int i = 0; i < treeNodes![index].Count - 1; i++)
+		{
+			if ((treeNodes[index][i].Type == TreeNodeType.Number && treeNodes[index][i + 1].Type == TreeNodeType.X) ||
+				(treeNodes[index][i].Type == TreeNodeType.X && treeNodes[index][i + 1].Type == TreeNodeType.Number) ||
+				(treeNodes[index][i].Type == TreeNodeType.X && treeNodes[index][i + 1].Type == TreeNodeType.X) ||
+				(treeNodes[index][i].Type == TreeNodeType.Number && treeNodes[index][i + 1].Type == TreeNodeType.Number))
+			{
+				treeNodes[index].Insert(i + 1, new TreeNode("*", TreeNodeType.Sign));
+				i++;
+			}
+		}
+	}
+
+	private bool ContainsUnnecessaryTypes(int index)
+	{
+		return treeNodes![index].Any(treeNode => treeNode.Type == TreeNodeType.Unknown);
+	}
+
+	private void ClearUnnecessaryTypes(int index)
+	{
+		treeNodes![index].RemoveAll(treeNode => treeNode.Type == TreeNodeType.Unknown);
+	}
+
+
+	private double CalculateEquation(double x, int index)
+	{
+		if (ContainsUnnecessaryTypes(index))
+		{
+			return 0;
+		}
+
+		List<TreeNode> workTreeNodes = new List<TreeNode>();
+		foreach (TreeNode treeNode in treeNodes![index])
+		{
+			workTreeNodes.Add(new TreeNode(treeNode.Value, treeNode.Type));
+		}
+
+		foreach (TreeNode treeNode in workTreeNodes)
+		{
+			if (treeNode.Type == TreeNodeType.X)
+			{
+				treeNode.Value = Convert.ToString(x);
+				treeNode.Type = TreeNodeType.Number;
+			}
+		}
+
+		for (int i = 0; i < workTreeNodes.Count; i++)
+		{
+			if (workTreeNodes[i].Type == TreeNodeType.Sign && (workTreeNodes[i].Value == "*" || workTreeNodes[i].Value == "/"))
+			{
+				int mult = 1;
+				if (i - 2 >= 0)
+				{
+					if (workTreeNodes[i - 2].Value == "-")
+					{
+						mult = -1;
+					}
+				}
+				double n1 = Convert.ToDouble(workTreeNodes[i - 1].Value) * mult;
+				double n2 = Convert.ToDouble(workTreeNodes[i + 1].Value);
+
+				double rez;
+				if (workTreeNodes[i].Value == "*")
+				{
+					rez = n1 * n2;
+
+				}
+				else
+				{
+					rez = n1 / n2;
+				}
+
+				workTreeNodes.RemoveRange(i - 1, 3);
+				workTreeNodes.Insert(i - 1, new TreeNode(rez.ToString(), TreeNodeType.Number));
+				i = i - 1;
+			}
+		}
+
+		for (int i = 0; i < workTreeNodes.Count; i++)
+		{
+			if (workTreeNodes[i].Type == TreeNodeType.Sign && (workTreeNodes[i].Value == "+" || workTreeNodes[i].Value == "-"))
+			{
+				double n1 = Convert.ToDouble(workTreeNodes[i - 1].Value);
+				double n2 = Convert.ToDouble(workTreeNodes[i + 1].Value);
+
+				double rez;
+				if (workTreeNodes[i].Value == "+")
+				{
+					rez = n1 + n2;
+				}
+				else
+				{
+					rez = n1 - n2;
+				}
+
+				workTreeNodes.RemoveRange(i - 1, 3);
+				workTreeNodes.Insert(i - 1, new TreeNode(rez.ToString(), TreeNodeType.Number));
+				i = i - 1;
+			}
+		}
+
+		double y = Convert.ToDouble(workTreeNodes[0].Value);
+		return y;
+	}
+
+	private void PrintTreeNodes(int identification, int index)
+	{
+		Console.WriteLine();
+		Console.WriteLine($"Ident: {identification}");
+		foreach (TreeNode treeNode in treeNodes![index])
+		{
+			Console.WriteLine(treeNode);
+		}
+	}
+
+	private void SaveGraph()
+	{
+		string directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+		string contents = "", eqs = "";
+		int c = 0, etC = enteredTexts.Count;
+
+		for (int i = 0; i < maximumOfEquation; i++)
+		{
+			if (equations![i] != "")
+			{
+				c++;
+				eqs = eqs + equations[i].Replace(" ", "").ToLower() + " " + i + "\n";
+			}
+		}
+
+		if (c == 0 && etC == 0)
+		{
+			return;
+		}
+
+		contents = c + " " + etC + "\n";
+		contents = contents + eqs;
+
+		if (etC != 0)
+		{
+			string spacePattern = "(x'.,/']!@!!!!$@%#@!^@#%!^!!!!!)";
+
+			foreach (EnteredText eText in enteredTexts)
+			{
+				contents += eText.Text.Replace(" ", spacePattern) + " " + eText.Position.X + " " + eText.Position.Y + "\n";
+			}
+		}
+
+		DateTime dateTime = DateTime.Now;
+		int year = dateTime.Year;
+		string month = Convert.ToString(dateTime.Month).PadLeft(2, '0');
+		string day = Convert.ToString(dateTime.Day).PadLeft(2, '0');
+		string hour = Convert.ToString(dateTime.Hour).PadLeft(2, '0');
+		string minute = Convert.ToString(dateTime.Minute).PadLeft(2, '0');
+		string second = Convert.ToString(dateTime.Second).PadLeft(2, '0');
+
+		File.WriteAllText(@$"{directory}\graph_{year}{month}{day}_{hour}{minute}{second}.txt", contents);
+	}
+
+	private async void LoadGraph(InputFileChangeEventArgs eventArgs)
+	{
+		StreamReader streamReader = new StreamReader(eventArgs.File.OpenReadStream());
+
+		string? line;
+		List<string> lines = new List<string>();
+		while ((line = await streamReader.ReadLineAsync()) != null)
+		{
+			lines.Add(line);
+		}
+		streamReader.Close();
+
+		string pattern = @"[-+]?\d+(\.\d+)?";
+		Regex numRegex = new Regex(pattern);
+
+		MatchCollection matches = numRegex.Matches(lines[0]);
+		int c = Convert.ToInt32(matches[0].Value), etC = Convert.ToInt32(matches[1].Value);
+
+		if (c != 0)
+		{
+			for (int i = 0; i < maximumOfEquation; i++)
+			{
+				equations![i] = "";
+				ParseEquation(null, i);
+			}
+		}
+		for (int i = 1; i <= c; i++)
+		{
+			string[] splitted = lines[i].Split(" ");
+			int index = Convert.ToInt32(splitted[1]);
+			equations![index] = splitted[0];
+			ParseEquation(null, index);
+		}
+
+		string spacePattern = "(x'.,/']!@!!!!$@%#@!^@#%!^!!!!!)";
+		if (etC != 0)
+		{
+			enteredTexts.Clear();
+		}
+		for (int i = 1; i <= etC; i++)
+		{
+			string[] splitted = lines[c + i].Split(" ");
+			string text = splitted[0].Replace(spacePattern, " ");
+			double x = Convert.ToDouble(splitted[1]);
+			double y = Convert.ToDouble(splitted[2]);
+
+			enteredTexts.Add(new EnteredText(text, new V2(x, y)));
+		}
+
+		StateHasChanged();
+	}
+
+	private bool[] haxOX = new bool[5];
+	private double GetLinearOX(int index)
+	{
+		bool increasingFunction = true;
+		double difference = CalculateEquation(-1, index) - CalculateEquation(1, index);
+		if (difference == 0 && CalculateEquation(-1, index) != 0)
+		{
+			haxOX[index] = false;
+			return 0;
+		} else if (difference > 0)
+		{
+			increasingFunction = false;
+		}
+
+		double left = -1000000000, right = 1000000000;
+		double x = 0, y;
+		const double ZERO = 0;
+
+		for (int i = 0; i < 1000; i++)
+		{
+			x = (left + right) / 2.0;
+			y = CalculateEquation(x, index);
+
+			if (ZERO < y)
+			{
+				if (increasingFunction)
+				{
+					right = x;
+				} else
+				{
+					left = x;
+				}
+			}
+			else if (y < ZERO)
+			{
+				if (increasingFunction)
+				{
+					left = x;
+				} else
+				{
+					right = x;
+				}
+			}
+			else
+			{
+				haxOX[index] = true;
+				return x;
+			}
+		}
+
+		haxOX[index] = true;
+		return x;
+	}
+
+	private double GetOY(int index)
+	{
+		return CalculateEquation(0, index);
+	}
+
+	private enum EquationType
+	{
+		Linear,
+		Quadratic,
+		Cubic,
+		Polynomial,
+		Unknown
+	}
+
+	private EquationType GetEquationType(int index)
+	{
+		EquationType type = EquationType.Linear;
+
+		string eq = equations![index];
+		eq = eq.ToLower();
+
+		List<string> xZones = new List<string>();
+		string zone = "";
+		bool xZone = false;
+		for (int i = 0; i < eq.Length; i++)
+		{
+			if (eq[i] == 'x')
+			{
+				xZone = true;
+			}
+
+			if (xZone && (eq[i] == '+' || eq[i] == '-'))
+			{
+				xZones.Add(zone);
+				zone = "";
+				xZone = false;
+			}
+
+			if (xZone)
+			{
+				zone += eq[i];
+			}
+		}
+		if (xZone)
+		{
+			xZones.Add(zone);
+		}
+
+		int maxX = 0;
+		foreach (string s in xZones)
+		{
+			int count = s.Count(c => c == 'x');
+			if (count > maxX)
+			{
+				maxX = count;
+			}
+		}
+
+		if (maxX == 2)
+		{
+			type = EquationType.Quadratic;
+		}
+		else if (maxX == 3)
+		{
+			type = EquationType.Cubic;
+		} else if (maxX >= 4)
+		{
+			type = EquationType.Polynomial;
+		}
+
+		return type;
+	}
+
+	// Quadratic solutions
+	private string SHIFTING_SIGNS = "+-";
+	private string SCALING_SIGNS = "*/";
+	private string DIGITS = "0123456789";
+
+	private char X = 'x';
+
+	private string AddMultiplicationSigns(string equation)
+	{
+		bool addMultiplicationSign;
+		for (int i = 0; i < equation.Length - 1; i++)
+		{
+			addMultiplicationSign = equation[i] == X && equation[i + 1] == X;
+			addMultiplicationSign = addMultiplicationSign || (DIGITS.Contains(equation[i]) && equation[i + 1] == X);
+
+			if (addMultiplicationSign)
+			{
+				equation = equation.Insert(i + 1, "*");
+			}
+		}
+
+		return equation;
+	}
+
+	public string[] GetEquationParts(string equation)
+	{
+		equation = equation.Replace(" ", "");
+		equation = equation.ToLower();
+
+		equation = AddMultiplicationSigns(equation);
+
+		for (int i = 0; i < equation.Length; i++)
+		{
+			if (SHIFTING_SIGNS.Contains(equation[i]) && i - 1 >= 0 && !SCALING_SIGNS.Contains(equation[i - 1]))
+			{
+				equation = equation.Insert(i, ":");
+				i++;
+			}
+		}
+
+		string[] splitted = equation.Split(":");
+		if (!SHIFTING_SIGNS.Contains(splitted[0][0]))
+		{
+			splitted[0] = "+" + splitted[0];
+		}
+
+		return splitted;
+	}
+
+	public double[] GetQuadraticEquationCoefficients(int ind)
+	{
+		double[] coeffs = new double[] { 0, 0, 0 };
+		string[] parts = GetEquationParts(equations![ind]);
+
+		string pattern = @"[-+]?\d+(\.\d+)?";
+		Regex numRegex = new Regex(pattern);
+
+		for (int i = 0; i < parts.Length; i++)
+		{
+			double value = 1;
+			MatchCollection numMatches = numRegex.Matches(parts[i]);
+			for (int j = 0; j < numMatches.Count; j++)
+			{
+				double n = Convert.ToDouble(numMatches[j].Value);
+				if (j != 0)
+				{
+					int index = parts[i].IndexOf(numMatches[j].Value);
+					if (parts[i][index - 1] == '*')
+					{
+						value *= n;
+					} else
+					{
+						value /= n;
+					}
+				} else
+				{
+					value = n;
+				}
+			}
+
+			if (i == 0 && parts[i][0] == '-')
+			{
+				value *= -1;
+			}
+
+			int coeffsIndex = 2 - parts[i].Count(c => c == X);
+			coeffs[coeffsIndex] += value;
+		}
+
+		return coeffs;
+	}
+
+	private enum QuadraticSolutionType
+	{
+		Two,
+		One,
+		Zero
+	}
+
+	private QuadraticSolutionType[] quadSolutions = new QuadraticSolutionType[5];
+	public double[] GetOXQuadraticEq(double[] coeffs, int index)
+	{
+		double a = coeffs[0], b = coeffs[1], c = coeffs[2];
+		double discriminant = b * b - 4 * a * c;
+
+		if (discriminant > 0)
+		{
+			quadSolutions[index] = QuadraticSolutionType.Two;
+		} else if (discriminant == 0)
+		{
+			quadSolutions[index] = QuadraticSolutionType.One;
+		} else
+		{
+			quadSolutions[index] = QuadraticSolutionType.Zero;
+		}
+
+		double x1 = (-b - Math.Sqrt(discriminant)) / (2 * a);
+		double x2 = (-b + Math.Sqrt(discriminant)) / (2 * a);
+
+		return [x1 == -0 ? 0 : x1, x2 == -0 ? 0 : x2];
+	}
+
+	private double GetXVertexQuadraticEq(double[] coeffs)
+	{
+		double a = coeffs[0], b = coeffs[1];
+		double xV = (-b) / (2 * a);
+
+		return xV == -0 ? 0 : xV;
+	}
+
+	// ********************************************************* Painting
+	private class EnteredText
+	{
+		public string Text { get; set; }
+		public V2 Position { get; set; }
+
+		public EnteredText(string text, V2 position)
+		{
+			Text = text;
+			Position = position;
+		}
+	}
+	private List<EnteredText> enteredTexts = new List<EnteredText>();
+
+	private string enterTextPrompt = "Click to place text";
+	private string[] cursors = new string[] { "default", "text" };
+	private string svgCursor = "grab";
+
+	private string? enteredText = "";
+	private V2 enteredTextPosition = new V2();
+
+	private bool readyToPlaceTextPoint = false;
+	private bool showEnterTextInput = false;
+
+	private void HandleEnterTextBtnClick()
+	{
+		readyToPlaceTextPoint = !readyToPlaceTextPoint;
+		if (readyToPlaceTextPoint)
+		{
+			svgCursor = "text";
+			enterTextPrompt = "Click to stop placing text";
+
+			StateHasChanged();
+		} else
+		{
+			svgCursor = "grab";
+			showEnterTextInput = false;
+			enterTextPrompt = "Click to place text";
+
+			if (enteredText != null && enteredText != "")
+			{
+				enteredTexts.Add(new EnteredText(enteredText, enteredTextPosition));
+				enteredText = "";
+				enteredTextPosition = new V2();
+			}
+		}
+	}
+
+	private bool deleteTextBtnClicked = false;
+	private EnteredText? eTextToDelete = null;
+	private string deleteTextPrompt = "Click to delete text";
+
+	private void HandleTextOnClick(EnteredText eText)
+	{
+		if (deleteTextBtnClicked)
+		{
+			eTextToDelete = eText;
+		}
+	}
+
+	private void HandleDeleteBtnText()
+	{
+		deleteTextBtnClicked = !deleteTextBtnClicked;
+		if (deleteTextBtnClicked)
+		{
+			deleteTextPrompt = "Click to stop deleting text";
+		} else
+		{
+			deleteTextPrompt = "Click to delete text";
+		}
+
+		StateHasChanged();
+	}
+
+	private void UpdateEnteredTextOnSVG(ChangeEventArgs eventArgs)
+	{
+		if (eventArgs.Value == null)
+		{
+			enteredText = "";
+		} else
+		{
+			enteredText = eventArgs.Value.ToString();
+		}
+	}
+
+	private ElementReference svgRef;
+	private async void HandleSVGClick(MouseEventArgs eventArgs)
+	{
+		if (readyToPlaceTextPoint)
+		{
+			showEnterTextInput = true;
+
+			double[] res = await JS.InvokeAsync<double[]>("convertToSvgCoords", svgRef, eventArgs.ClientX, eventArgs.ClientY);
+
+			enteredTextPosition.X = Math.Round(res[0], 4);
+			enteredTextPosition.Y = Math.Round(res[1], 4);
+
+			StateHasChanged();
+		}
+	}
+}
